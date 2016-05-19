@@ -1,0 +1,257 @@
+#!/usr/bin/perl
+#
+# TODO: translation comment from Japanese to English.
+#       (Japanese comment will move to some document space)
+#
+# gentle_unlink - 紳士的な削除
+# 大量のファイルを削除する際の要望をなるべく叶えます
+#
+# gentle_unlink remove_file_list.txt
+# ls *.ext | gentle_unlink
+#
+# -t|--timeout=n: 指定秒数経過しても削除が終わらない場合はいったん終了する
+# -p|--progress: 進捗をいい感じに報告する
+# -i|--interval: 削除のインターバル秒数を小数点で指定
+# -f|--flexible: 存在しないファイル名でエラーにしない
+# --dry-run: 何が行われるかだけ見せて実際の動作を行わない
+
+use strict;
+use warnings;
+
+use Carp qw(croak);
+use Term::ANSIColor qw(colored);
+use Getopt::Long qw(:config posix_default no_ignore_case bundling auto_help);
+use Time::HiRes qw(time usleep ualarm);
+
+use constant DEBUG => $ENV{DEBUG};
+use constant MAX_TIME_HIRES_BIT => 31;
+use constant UNLINK_CHUNK_NUM => 20;
+use constant COLOR_WARNING => "yellow";
+use constant COLOR_ERROR   => "red";
+use constant COLOR_INFO    => "green";
+
+$SIG{USR1} = \&guess_current_status;
+
+GetOptions(
+    \my %opt,
+    "timeout|t=f", "progress|p", "interval|i=f", "flexible|f", "dry-run|n"
+);
+
+my $timeout  = $opt{timeout} || 0;
+my $progress = $opt{progress};
+my $interval = $opt{interval} || 0;
+my $dry_run  = $opt{"dry-run"};
+my $flexible = $opt{flexible};
+
+my $delete_count = 0;
+my $delete_size_total = 0;
+my $timeout_flag;
+my $preserve_interval_flag;
+my $process_start_time = time;
+
+local $@;
+eval {
+    local $SIG{ALRM} = $timeout > 0 ? sub { $timeout_flag = 1; } : "DEFAULT";
+    # alarm はマイクロ秒(10^{-6})だけど引数が符号付き32ビットなので、それ以上は alarm で
+    my $alarm_cancel_cb; # アラームキャンセルなら alram 0 でも ualarm 0 でも同じはずだけど
+    my $timeout_microsecond = $timeout * 10**6;
+    if ( bit($timeout_microsecond) < MAX_TIME_HIRES_BIT ) {
+        ualarm($timeout_microsecond);
+        $alarm_cancel_cb = sub { ualarm 0; };
+    } else {
+        alarm(int($timeout));
+        $alarm_cancel_cb = sub { alarm 0; };
+    }
+    gentle_unlink();
+    $alarm_cancel_cb->();
+};
+if ( $@ ) {
+    print colored("e=$@\n", COLOR_ERROR);
+}
+
+sub gentle_unlink {
+    my @file_chunk;
+    my $start_time = time;
+    while (<>) {
+        chomp;
+        print "> $_\n" if DEBUG;
+        push @file_chunk, $_;
+        if ( @file_chunk > UNLINK_CHUNK_NUM ) {
+            unlink_chunk(@file_chunk);
+            @file_chunk = ();
+            $preserve_interval_flag = 1;
+        }
+    } continue {
+        if ( $timeout_flag ) {
+            progress_printf(colored("timeout\n", COLOR_WARNING));
+            last;
+        }
+        if ( $interval && $preserve_interval_flag ) {
+            progress_printf(colored("interval %f seconds.\n", COLOR_INFO), $interval );
+            usleep $interval * 10**6;
+            $preserve_interval_flag = 0;
+        }
+    }
+    if ( @file_chunk ) {
+        unlink_chunk(@file_chunk);
+    }
+    my $end_time = time;
+    progress_printf("%f seconds, %s bytes, total %d files deleted.\n",
+                    $end_time - $start_time, comma($delete_size_total), $delete_count);
+    progress_printf(colored("dry-run mode. all delete operations are fake.\n", "blue")) if $dry_run;
+}
+
+sub unlink_chunk {
+    my @files = @_;
+    my @nowhere_files = grep { !-f } @files;
+    if ( @nowhere_files ) {
+        if ( $flexible ) {
+            progress_printf(colored(
+                join( "", map { qq(file "$_" is not found\n) } @nowhere_files ),
+                COLOR_WARNING
+            )); # progress_printf や colored の呼び出しを削減したほうが速いはず
+        } else {
+            croak colored("unlink_chunk gives lost filename.", COLOR_ERROR);
+        }
+    }
+    progress_printf(">>> dry-run mode\n") if $dry_run;
+    progress_printf("%4d: deleting... %s (%s bytes)\n",
+                    ++$delete_count, $_, comma(-s $_)) for @files;
+    $delete_size_total += -s $_ for @files;
+    return if $dry_run;
+
+    local $!;
+    my $chunk_num  = @files;
+    my $delete_num = unlink @files;
+    if ( $chunk_num != $delete_num ) {
+        print colored("maybe delete failed.\n" . "w=$!", COLOR_ERROR);
+        croak colored("delete failure error", COLOR_ERROR) if !$flexible;
+    }
+}
+
+sub progress_printf {
+    return if !$progress;
+    printf @_;
+}
+
+# for USR1
+sub guess_current_status {
+    my $signal = shift;
+    printf colored("dry-run mode. all delete operations are fake.\n", "blue") if $dry_run;
+    printf "process id: %d\n", $$;
+    printf "delete file count: %s\n", comma($delete_count);
+    printf "delete size total: %s bytes\n", comma($delete_size_total);
+    printf "process run times: %s second\n", comma(int(time - $process_start_time));
+    printf "interval=%d timeout=%s\n", $interval, $timeout;
+}
+
+sub comma {
+    my $number = shift;
+    $number =~ s/(?<=\d)(?=(?:\d\d\d)+(?!\d))/,/g;
+    return $number;
+}
+
+sub bit {
+    my $integer = shift;
+    return 0 if $integer == 0;
+    return( log($integer) / log(2) );
+}
+
+=pod
+
+=head1 NAME
+
+gentle_unlink - 紳士的な削除ツール
+
+=head1 SYNOPSIS
+
+ gentle_unlink remove_file_list.txt
+ find garbage -type f | gentle_unlink
+ ls -1 *.log | gentle_unlink --timeout=600 --progress --interval=2
+ gentle_unlink [--timeout=SECONDS] [--progress] [--interval=SECONDS] \
+               [--flexible] [--dry-run]
+
+=head1 DESCRIPTIONS
+
+既存の rm には以下の問題点があります。
+
+=over
+
+=item 進捗を教えてくれない（せいぜい -v）
+
+=item 全速力で削除作業しようとするのでディスクI/Oの負荷がかなり上がる
+
+=item
+
+=back
+
+ほんのすこしのファイルを削除するだけならいいのですが、おびただしい数・おびただしいサイズの
+ファイル群を削除するときには上記が無視できない場合があります。
+
+このスクリプトは、進捗を知る数々の方法、そして手加減しながら削除する配慮などを
+こらしたものです。
+
+また、先に削除するファイルリストを作成する必要がありますが、
+これは削除する対象をあらかじめ目視できるメリットが有ります。
+実際に目視をして納得した場合にはパイプでこのコマンドに繋げばいいのです。
+
+このスクリプトはディレクトリを削除する方法を提供しませんが、
+これは積極的に提供していません。ディレクトリの削除は危険なオペレーションミスが
+つきものだからです。実際にこのスクリプトで削除完了したところで
+C<find . -type d | sort -r | xargs rmdir> などとして削除すればよいでしょう。
+
+=head1 OPTIONS
+
+=head2 -t|--timeout=n
+
+指定秒数経過しても削除が終わらない場合はいったん終了する。
+
+=head2 -p|--progress
+
+進捗をいい感じに報告する。
+
+=head2 -i|--interval
+
+削除のインターバル秒数を小数点で指定。内部で unlink を発行したあとで
+この秒数だけ休む。内部で unlink を発行するタイミングは、ある一定数のファイルパスを
+標準入力から受け取ってから（UNLINK_CHUNK_NUM 定数がハードコードされています）。
+
+=head2 -f|--flexible
+
+存在しないファイル名を受け取ってもエラーにしない。通常はエラーになって終了してしまう。
+
+force ではなく flexible です。
+
+=head2 --dry-run
+
+実際には削除をしないモード。
+
+=head1 SIGNALS
+
+このスクリプトは --progress オプションで進捗を表示できますが、
+これはファイルリダイレクトでログファイルに書いておきつつ、
+プロセスをバックグラウンドに回してしまって、ログファイルを都度開いたり
+C<tail -f> で確認するといった使い方もできます。
+
+プロセスをバックグラウンドに回した場合、USR1 シグナルを送ることによって
+現在の状態を標準出力に表示させることができます。標準出力ということなので、
+C<ps> のプロセスIDではなく、現在のシェルのプロセス番号を C<kill -USR1 %1> といった
+形で指定することを想定しています。
+
+=head1 TODO
+
+超巨大なファイルの削除進捗。これはファイルシステムの低レベルAPIに介入しないといけ無さそう。
+
+strace でシステムコールを減らすことで高速化を測れないかな。unlink 関数の実行も1ファイル毎に
+呼び出しても特に負荷の点で変わらなければ、そうしてしまったほうがシンプルでいいかも。
+とはいえシステムコールを減らして高速化したら負荷が上がると困る部分もある。
+
+削除すべきファイルとして渡されたものがなかった場合に警告レベルで無視する (rm -f)。
+
+Ctrl-C (INT) をハンドリングする。
+
+=head1 AUTHOR
+
+OGATA Tetsuji E<lt>tetsuji.ogata@gmail.comE<gt>
+
+=cut
