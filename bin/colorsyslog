@@ -1,0 +1,150 @@
+#!/usr/bin/perl
+# xtetsuji 2015/11/05
+# xtetsuji 2016/05/21 for encoreutils
+
+use v5.10;
+use strict;
+use warnings;
+
+use Term::ANSIColor qw(colored);
+
+use constant PLUGIN_PATH => $ENV{COLORSYSLOG_PLUGIN_PATH} || "$ENV{HOME}/.config/colorsyslog/plugins";
+
+sub load_plugins {
+    return if !-d PLUGIN_PATH;
+    return map { do $_ } glob(PLUGIN_PATH . "/*.pl");
+}
+
+my $syslog_re = qr/^(?<date>\w\w\w [ \d]\d) (?<time>\d\d:\d\d:\d\d) (?<host>\S+) (?<process>\S+): (?<message>.*)/;
+
+my %color = (
+    date    => "cyan",
+    time    => "green",
+    host    => "blue bold",
+    process => "magenta",
+    message => sub {
+        my ($message, %property) = @_;
+        my @plugins = load_plugins();
+        $message = $_->($message, %property) // $message for @plugins;
+        return $message;
+    },
+);
+
+while (<>) {
+    # Nov  1 23:03:21 hostname postfix/pickup[12345]: D24EAA9510B: uid=500 from=<noreply@example.com>
+    s{$syslog_re}{
+        join " ", map {
+              ref $color{$_} eq 'CODE' ? $color{$_}->($+{$_}, %+)
+            : $color{$_}               ? colored($+{$_}, $color{$_})
+            : $+{$_}
+        } qw(date time host process message)
+    }e;
+    print;
+}
+
+__END__
+
+=pod
+
+=head1 NAME
+
+colorsyslog - colorize syslog format
+
+=head1 SYNOPSIS
+
+  colorsyslog </var/log/messages
+  colorsyslog /var/log/messages
+  grep -h keyword /var/log/messages | colorsyslog
+  colorsyslog /var/log/messages | less -R
+  colorsyslog /var/log/messages | lv -c
+  colorsyslog /var/log/messages | tail -f
+
+=head1 DESCRIPTIONS
+
+colorsyslog is utility of colorize syslog format of given filename or
+standard input.
+
+This script is simple. Require Perl 5.10 and its core modules only.
+
+It has simple plugin mechanism.
+
+=head1 PLUGINS
+
+colorsyslog has very simple plugin system for coloring syslog message block.
+It is very simple mechanism for server engineer as non-programmer.
+
+This plugin is as ordinally Per script.
+It is written only one subroutine reference (Perl anonymous procedure block).
+It is placed ~/.config/colorsyslog/plugins/NAME.pl.
+
+EXPERIMENTAL: you can edit plugin directory as set COLORSYSLOG_PLUGIN_PATH
+environment variable.
+
+Do you want to know syntax sample? It is very simple!
+
+no-op filter:
+
+  # ~/.config/colorsyslog/plugins/noop.pl
+  sub {
+    my ($message, %property) = @_;
+    return $message;
+  };
+
+In plugin script, you give message string and syslog entries property per line.
+For plugin construction, you give these, and you modify $message and return
+modified $message. You can refer other syslog properties for modify message.
+
+Following is %property construction.
+
+  May 22 06:27:24 www4146ue mount.davfs: open files exceed max cache...
+  ^^^^^^ ^^^^^^^^ ^^^^^^^^^ ^^^^^^^^^^^  ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  date   time     host      process      message
+
+You can coloring message with refer some property.
+
+Coloring task is to edit message. you can use colored function
+from L<Term::ANSIColor> module.
+
+coloring, let some keywords red
+
+  # ~/.config/colorsyslog/plugins/keyword_red.pl
+  sub {
+    my ($message, %property) = @_;
+    $message =~ s/(foo|bar|buz)/ colored($1, "red") /e;
+    return $message;
+  };
+
+Easily you use only replace syntax `s///eg` and colored function,
+you can color syslog message block.
+
+Other samples are in GitHub repository.
+
+=head1 TODO
+
+=over
+
+=item *
+
+Syslog format property color setting by config file.
+
+=item *
+
+More setup manual.
+
+=item *
+
+=back
+
+=head1 CAUTION
+
+Currently release is beta.
+
+=head1 SEE ALSO
+
+encoreutils E<lt>https://github.com/xtetsuji/encoreutilsE<gt>
+
+=head1 AUTHOR
+
+OGATA Tetsuji E<lt>tetsuji.ogata@gmail.comE<lt>
+
+=cut
