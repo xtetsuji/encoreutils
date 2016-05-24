@@ -25,6 +25,7 @@ for strict portability.
 ## Menu
 
 * gentle_unlink : gentle unlink (remove / rm).
+* colorsyslog : sysylog coloring.
 
 ## Author
 
