@@ -5,7 +5,6 @@ sub {
     my ($message, %property) = @_;
     return if $property{process} !~ /^postfix/;
 
-    # this "state", only low cost "my"
     my %postfix_status_color = (
         sent     => "green",
         deferred => "yellow",
@@ -31,3 +30,31 @@ sub {
     }
     return $message;
 };
+
+=pod
+
+=head1 NAME
+
+postfix.pl - colorsyslog plugin of postfix maillog
+
+=head1 SYNOPSIS
+
+  mkdir -p ~/.config/colorsyslog/plugins/
+  cp postfix.log ~/.config/colorsyslog/plugins/
+  colorsyslog /var/log/maillog
+
+=head1 DESCRIPTIONS
+
+Because postfix maillog format is syslog, you can use colorsyslog
+to coloring postfix mail.log.
+
+This plugin is coloring message part as postfix semantics.
+
+=head1 COPYRIGHT AND LICENSE
+
+OGATA Tetsuji E<lt>tetsuji.ogata@gmail.comE<lt>
+
+This program is free software; you can redistribute it and/or
+modify it under the same terms as Perl itself.
+
+=cut
