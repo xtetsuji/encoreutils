@@ -19,16 +19,16 @@ use strict;
 use warnings;
 
 use Carp qw(croak);
-use Term::ANSIColor qw(colored);
 use Getopt::Long qw(:config posix_default no_ignore_case bundling auto_help);
+use Term::ANSIColor qw(colored);
 use Time::HiRes qw(time usleep ualarm);
 
-use constant DEBUG => $ENV{DEBUG};
+use constant DEBUG              => $ENV{DEBUG};
 use constant MAX_TIME_HIRES_BIT => 31;
-use constant UNLINK_CHUNK_NUM => 20;
-use constant COLOR_WARNING => "yellow";
-use constant COLOR_ERROR   => "red";
-use constant COLOR_INFO    => "green";
+use constant UNLINK_CHUNK_NUM   => 20;
+use constant COLOR_WARNING      => "yellow";
+use constant COLOR_ERROR        => "red";
+use constant COLOR_INFO         => "green";
 
 $SIG{USR1} = \&guess_current_status;
 
