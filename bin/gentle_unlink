@@ -13,6 +13,7 @@
 # -p|--progress: 進捗をいい感じに報告する
 # -i|--interval: 削除のインターバル秒数を小数点で指定
 # -f|--flexible: 存在しないファイル名でエラーにしない
+# --total-hint=n: 何行あるのか分かっている場合に教える（progress表示に変化がある）
 # --dry-run: 何が行われるかだけ見せて実際の動作を行わない
 
 use strict;
@@ -34,7 +35,7 @@ $SIG{USR1} = \&guess_current_status;
 
 GetOptions(
     \my %opt,
-    "timeout|t=f", "progress|p", "interval|i=f", "flexible|f", "dry-run|n"
+    "timeout|t=f", "progress|p", "interval|i=f", "flexible|f", "total-hint=i", "dry-run|n"
 );
 
 my $timeout  = $opt{timeout} || 0;
@@ -42,11 +43,16 @@ my $progress = $opt{progress};
 my $interval = $opt{interval} || 0;
 my $dry_run  = $opt{"dry-run"};
 my $flexible = $opt{flexible};
+my $total_h  = $opt{"total-hint"}; # 自前で読んでもいいんだけど wc -l は事前にしている場合が多いので
 
-my $delete_count = 0;
+my $delete_count      = 0;
 my $delete_size_total = 0;
+my $total_string      = $total_h || '(total_unresolved)';
+
 my $timeout_flag;
 my $preserve_interval_flag;
+my $unlink_chunk_executed_flag;
+
 my $process_start_time = time;
 
 local $@;
@@ -80,17 +86,26 @@ sub gentle_unlink {
             unlink_chunk(@file_chunk);
             @file_chunk = ();
             $preserve_interval_flag = 1;
+            $unlink_chunk_executed_flag = 1;
         }
     } continue {
         if ( $timeout_flag ) {
             progress_printf(colored("timeout\n", COLOR_WARNING));
             last;
         }
-        if ( $interval && $preserve_interval_flag ) {
+        if ( $progress && $unlink_chunk_executed_flag ) {
+            my $seconds = time - $start_time;
+            my $files_per_seconds = $delete_count / $seconds;
+            progress_printf(colored("delete speed %.2f [files/sec].", COLOR_INFO), $files_per_seconds);
+            progress_printf(colored(" [rem %s].", "green"), remain_hms($total_h, $delete_count, $seconds)) if $total_h;
+            progress_printf(colored(" [count %d/%s].", "green"), $delete_count, $total_string);
+            progress_printf("\n");
+        }
+        if ( $interval && $unlink_chunk_executed_flag ) {
             progress_printf(colored("interval %f seconds.\n", COLOR_INFO), $interval );
             usleep $interval * 10**6;
-            $preserve_interval_flag = 0;
         }
+        $unlink_chunk_executed_flag = 0;
     }
     if ( @file_chunk ) {
         unlink_chunk(@file_chunk);
@@ -126,6 +141,24 @@ sub unlink_chunk {
     if ( $chunk_num != $delete_num ) {
         print colored("maybe delete failed.\n" . "w=$!", COLOR_ERROR);
         croak colored("delete failure error", COLOR_ERROR) if !$flexible;
+    }
+}
+
+sub remain_hms {
+    my ($total, $curnum, $seconds) = @_;
+# $seconds 開始からの経過時間 (sec)
+# $total トータル
+# $curnum 現在の処理数
+# $curnum / $seconds 秒あたりの処理数
+# $total / ( $curnum / $seconds ) total全部を処理し終わるのに必要な秒数
+# ( $total - $curnum ) / ( $curnum / $seconds ) 残りを処理し終わるのに必要な秒数
+    my $rsec = $seconds * ($total - $curnum) / $curnum;
+    if ( $rsec < 60 ) {
+        return sprintf "00:%02d", $rsec;
+    } elsif ( $rsec < 3600 ) {
+        return sprintf "%02d:%02d", int($rsec / 60), $rsec % 60
+    } else {
+        return sprintf "%02d:%02d:%02d", int($rsec / 3600), int($rsec % 3600 / 60), $rsec % 60;
     }
 }
 
@@ -169,7 +202,7 @@ gentle_unlink - 紳士的な削除ツール
  find garbage -type f | gentle_unlink
  ls -1 *.log | gentle_unlink --timeout=600 --progress --interval=2
  gentle_unlink [--timeout=SECONDS] [--progress] [--interval=SECONDS] \
-               [--flexible] [--dry-run]
+               [--flexible] [--total-hint=TOTAL][--dry-run]
 
 =head1 DESCRIPTIONS
 
@@ -221,6 +254,12 @@ C<find . -type d | sort -r | xargs rmdir> などとして削除すればよい�
 存在しないファイル名を受け取ってもエラーにしない。通常はエラーになって終了してしまう。
 
 force ではなく flexible です。
+
+=head2 --total-hint=TOTAL
+
+与えているファイルリストの行数（ファイル数）をわたします。
+
+現状の gentle_unlink は効率のため、ファイルリストを一度飲みきらず逐次処理をしていきます。そのため行数を把握していません。ただこの数が与えられると、ファイル削除の速度を計算してくれます。
 
 =head2 --dry-run
 
