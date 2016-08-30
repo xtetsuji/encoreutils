@@ -52,22 +52,15 @@ my $total_string      = $total_h || '(total_unresolved)';
 my $timeout_flag;
 my $preserve_interval_flag;
 my $unlink_chunk_executed_flag;
+my $int_press_count = 0;
 
 my $process_start_time = time;
 
 local $@;
 eval {
+    local $SIG{INT} = sub { $SIG{INT} = "DEFAULT" if ++$int_press_count >= 3; };
     local $SIG{ALRM} = $timeout > 0 ? sub { $timeout_flag = 1; } : "DEFAULT";
-    # alarm はマイクロ秒(10^{-6})だけど引数が符号付き32ビットなので、それ以上は alarm で
-    my $alarm_cancel_cb; # アラームキャンセルなら alram 0 でも ualarm 0 でも同じはずだけど
-    my $timeout_microsecond = $timeout * 10**6;
-    if ( bit($timeout_microsecond) < MAX_TIME_HIRES_BIT ) {
-        ualarm($timeout_microsecond);
-        $alarm_cancel_cb = sub { ualarm 0; };
-    } else {
-        alarm(int($timeout));
-        $alarm_cancel_cb = sub { alarm 0; };
-    }
+    my $alarm_cancel_cb = ualarm2($timeout);
     gentle_unlink();
     $alarm_cancel_cb->();
 };
@@ -176,6 +169,21 @@ sub remain_hms {
 sub progress_printf {
     return if !$progress;
     printf @_;
+}
+
+sub ualarm2 {
+    my $timeout = shift;
+    my $timeout_microsecond = $timeout * 10**6;
+    my $alarm_cancel_cb; # アラームキャンセルなら alram 0 でも ualarm 0 でも同じはずだけど
+    # alarm はマイクロ秒(10^{-6})だけど引数が符号付き32ビットなので、それ以上は alarm で
+    if ( bit($timeout_microsecond) < MAX_TIME_HIRES_BIT ) {
+        ualarm($timeout_microsecond);
+        $alarm_cancel_cb = sub { ualarm 0; };
+    } else {
+        alarm(int($timeout));
+        $alarm_cancel_cb = sub { alarm 0; };
+    }
+    return $alarm_cancel_cb;
 }
 
 # for USR1
