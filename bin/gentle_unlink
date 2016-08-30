@@ -21,7 +21,7 @@ use warnings;
 
 use Carp qw(croak);
 use Getopt::Long qw(:config posix_default no_ignore_case bundling auto_help);
-use Term::ANSIColor qw(colored);
+use Term::ANSIColor qw(colored color);
 use Time::HiRes qw(time usleep ualarm);
 
 use constant DEBUG              => $ENV{DEBUG};
@@ -75,6 +75,10 @@ if ( $@ ) {
     print colored("e=$@\n", COLOR_ERROR);
 }
 
+END {
+    print color("reset");
+}
+
 sub gentle_unlink {
     my @file_chunk;
     my $start_time = time;
@@ -97,8 +101,8 @@ sub gentle_unlink {
             my $seconds = time - $start_time;
             my $files_per_seconds = $delete_count / $seconds;
             progress_printf(colored("delete speed %.2f [files/sec].", COLOR_INFO), $files_per_seconds);
-            progress_printf(colored(" [rem %s].", "green"), remain_hms($total_h, $delete_count, $seconds)) if $total_h;
-            progress_printf(colored(" [count %d/%s].", "green"), $delete_count, $total_string);
+            progress_printf(colored(" [rem %s].", COLOR_INFO), remain_hms($total_h, $delete_count, $seconds)) if $total_h;
+            progress_printf(colored(" [count %d/%s].", COLOR_INFO), $delete_count, $total_string);
             progress_printf("\n");
         }
         if ( $interval && $unlink_chunk_executed_flag ) {
@@ -121,18 +125,25 @@ sub unlink_chunk {
     my @nowhere_files = grep { !-f } @files;
     if ( @nowhere_files ) {
         if ( $flexible ) {
-            progress_printf(colored(
-                join( "", map { qq(file "$_" is not found\n) } @nowhere_files ),
-                COLOR_WARNING
-            )); # progress_printf や colored の呼び出しを削減したほうが速いはず
+            @files = grep { -f } @files;
         } else {
             croak colored("unlink_chunk gives lost filename.", COLOR_ERROR);
         }
     }
     progress_printf(">>> dry-run mode\n") if $dry_run;
-    progress_printf("%4d: deleting... %s (%s bytes)\n",
-                    ++$delete_count, $_, comma(-s $_)) for @files;
-    $delete_size_total += -s $_ for @files;
+    if ( @nowhere_files ) {
+        print color(COLOR_WARNING);
+        for my $nowhere_file (@nowhere_files) {
+            progress_printf(qq(%4d: not found.. %s\n), ++$delete_count, $nowhere_file);
+        }
+        print color("reset");
+    }
+    for my $file (@files) {
+        my $filesize = -s $file;
+        progress_printf("%4d: deleting... %s (%s bytes)\n",
+                        ++$delete_count, $file, comma($filesize));
+        $delete_size_total += $filesize;
+    }
     return if $dry_run;
 
     local $!;
@@ -180,6 +191,7 @@ sub guess_current_status {
 
 sub comma {
     my $number = shift;
+    return $number if !$number; # 0 or undefined value.
     $number =~ s/(?<=\d)(?=(?:\d\d\d)+(?!\d))/,/g;
     return $number;
 }
