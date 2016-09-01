@@ -27,6 +27,7 @@ use Time::HiRes qw(time usleep ualarm);
 use constant DEBUG              => $ENV{DEBUG};
 use constant MAX_TIME_HIRES_BIT => 31;
 use constant UNLINK_CHUNK_NUM   => 20;
+use constant SIGINT_PRESS_COUNT => 3;
 use constant COLOR_WARNING      => "yellow";
 use constant COLOR_ERROR        => "red";
 use constant COLOR_INFO         => "green";
@@ -58,7 +59,7 @@ my $process_start_time = time;
 
 local $@;
 eval {
-    local $SIG{INT} = sub { $SIG{INT} = "DEFAULT" if ++$int_press_count >= 3; };
+    local $SIG{INT} = sub { $int_press_count++; };
     local $SIG{ALRM} = $timeout > 0 ? sub { $timeout_flag = 1; } : "DEFAULT";
     my $alarm_cancel_cb = ualarm2($timeout);
     gentle_unlink();
@@ -88,6 +89,10 @@ sub gentle_unlink {
     } continue {
         if ( $timeout_flag ) {
             progress_printf(colored("timeout\n", COLOR_WARNING));
+            last;
+        }
+        if ( $int_press_count >= SIGINT_PRESS_COUNT ) {
+            progress_printf(colored("give INT signal more than " . SIGINT_PRESS_COUNT . " times.\n", COLOR_WARNING));
             last;
         }
         if ( $progress && $unlink_chunk_executed_flag ) {
