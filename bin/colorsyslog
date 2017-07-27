@@ -10,18 +10,19 @@ use Term::ANSIColor qw(colored);
 
 use constant PLUGIN_PATH => $ENV{COLORSYSLOG_PLUGIN_PATH} || "$ENV{HOME}/.config/colorsyslog/plugins";
 
+# TODO: few expensive on huge calling...
 sub load_plugins {
     return if !-d PLUGIN_PATH;
     return map { do $_ } glob(PLUGIN_PATH . "/*.pl");
 }
 
-my $syslog_re = qr/^(?<date>\w\w\w [ \d]\d) (?<time>\d\d:\d\d:\d\d) (?<host>\S+) (?<process>\S+): (?<message>.*)/;
+my $syslog_re = qr/^(?<date>\w\w\w [ \d]\d) (?<time>\d\d:\d\d:\d\d) (?<host>\S+) (?<process>[^: ]+:) (?<message>.*)/;
 
 my %color = (
     date    => "cyan",
     time    => "green",
     host    => "blue bold",
-    process => "magenta",
+    process => "magenta", # group/command[PID]
     message => sub {
         my ($message, %property) = @_;
         my @plugins = load_plugins();
