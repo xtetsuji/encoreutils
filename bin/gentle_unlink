@@ -125,7 +125,7 @@ sub unlink_chunk {
         if ( $flexible ) {
             @files = grep { -f } @files;
         } else {
-            croak colored("unlink_chunk gives lost filename.", COLOR_ERROR);
+            croak colored("unlink_chunk gives non-file path (lost filename, directory, and so on.)", COLOR_ERROR);
         }
     }
     progress_printf(">>> dry-run mode\n") if $dry_run;
