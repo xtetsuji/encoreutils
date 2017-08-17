@@ -16,6 +16,9 @@
 # --total-hint=n: 何行あるのか分かっている場合に教える（progress表示に変化がある）
 # --dry-run: 何が行われるかだけ見せて実際の動作を行わない
 
+our $VERSION = "0.2RC1";
+our $BUILD_DATE = "2017-08-17";
+
 use strict;
 use warnings;
 
@@ -36,8 +39,14 @@ $SIG{USR1} = \&guess_current_status;
 
 GetOptions(
     \my %opt,
-    "timeout|t=f", "progress|p", "interval|i=f", "flexible|f", "total-hint=i", "dry-run|n"
+    "timeout|t=f", "progress|p", "interval|i=f", "flexible|f", "total-hint=i", "dry-run|n",
+    "version",
 );
+
+if ( $opt{version} ) {
+    print "gentle_unlink_$VERSION ($BUILD_DATE)\n";
+    exit;
+}
 
 my $timeout  = $opt{timeout} || 0;
 my $progress = $opt{progress};
