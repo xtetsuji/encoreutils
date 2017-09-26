@@ -16,7 +16,7 @@
 # --total-hint=n: 何行あるのか分かっている場合に教える（progress表示に変化がある）
 # --dry-run: 何が行われるかだけ見せて実際の動作を行わない
 
-our $VERSION = "0.2RC1";
+our $VERSION = "0.2RC2";
 our $BUILD_DATE = "2017-08-17";
 
 use strict;
