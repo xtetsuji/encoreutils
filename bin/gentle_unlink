@@ -128,7 +128,7 @@ sub gentle_unlink {
     my $end_time = time;
     progress_printf("%f seconds, %s bytes, total %d files deleted.\n",
                     $end_time - $start_time, comma($delete_size_total), $delete_count);
-    progress_printf(colored("dry-run mode. all delete operations are fake.\n", "blue")) if $dry_run;
+    progress_printf(colored("dry-run mode. all delete operations are fake.\n", "cyan")) if $dry_run;
 }
 
 sub unlink_chunk {
@@ -141,7 +141,7 @@ sub unlink_chunk {
             croak colored("unlink_chunk gives non-file path (lost filename, directory, and so on.)", COLOR_ERROR);
         }
     }
-    progress_printf(">>> dry-run mode\n") if $dry_run;
+    progress_printf(colored("### dry-run mode\n", "cyan")) if $dry_run;
     if ( @nowhere_files ) {
         print color(COLOR_WARNING);
         for my $nowhere_file (@nowhere_files) {
@@ -207,7 +207,7 @@ sub ualarm2 {
 # for USR1
 sub guess_current_status {
     my $signal = shift;
-    printf colored("dry-run mode. all delete operations are fake.\n", "blue") if $dry_run;
+    printf colored("dry-run mode. all delete operations are fake.\n", "cyan") if $dry_run;
     printf "process id: %d\n", $$;
     printf "delete file count: %s\n", comma($delete_count);
     printf "delete size total: %s bytes\n", comma($delete_size_total);
