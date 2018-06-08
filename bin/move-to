@@ -1,0 +1,34 @@
+#!/bin/bash
+# xtetsuji 2018/04/10
+# Usage:
+#   move-to DIR FILE1 FILE2 ...
+#
+# mv FILE1 FILE2 ... DIR ; 移動元ファイル群と移動先の指定が逆なもの
+#
+# これは xargs で役立つ
+# e.g.:
+#   4並列、一度の移動プロセスで最大100ファイルを目的のディレクトリへ移動させる場合
+#   find . -mtime +365 -type f | xargs -P 4 -n 100 move-to backup_dir/
+
+set -eu
+
+declare opt dir
+readonly MV_COMMAND="mv -v"
+#readonly MV_COMMAND="echo mv"
+
+# ハイフンから始まる引数があれば、全部オプションとして引き上げる
+# TODO: 引き上げたものを使っていない
+while [ "x${1:0:1}" = "x-" ] ; do
+    opt="$opt $1"
+    shift
+done
+
+dir="$1"
+shift
+
+if [ ! -d "$dir" ] ; then
+    echo "target dir \"$dir\" is not found"
+    exit 1
+fi
+
+$MV_COMMAND "$@" $dir
