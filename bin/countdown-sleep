@@ -1,0 +1,23 @@
+#!/bin/bash
+set -eu
+
+seconds="${1:-}"
+
+if [ -z "$seconds" ] || [[ $seconds =~ [^0-9] ]] ; then
+    echo "Usage:"
+    echo "  $(basename $0) SECOND"
+    exit
+fi
+
+while true ; do
+    echo -n $(( seconds ))
+    sleep 1
+    if (( seconds <= 1 )) ; then
+        printf "\b0"
+        break
+    fi
+    for i in $(seq 1 ${#seconds}) ; do
+        printf "\b \b"
+    done
+    (( seconds-- ))
+done
