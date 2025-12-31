@@ -1,0 +1,3 @@
+#!/bin/bash
+
+yes "" | head -n $(( $(tput lines ) - 1 ))
