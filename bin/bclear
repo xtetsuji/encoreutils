@@ -1,3 +1,33 @@
 #!/bin/bash
 
-yes "" | head -n $(( $(tput lines ) - 1 ))
+usage() {
+    echo "Usage: bclear [LINES]" >&2
+}
+
+lines_arg="${1:-}"
+if [ -n "$lines_arg" ] ; then
+    case "$lines_arg" in
+        *[!0-9]*)
+            usage
+            exit 1
+            ;;
+    esac
+    lines="$lines_arg"
+else
+    lines=""
+    if [ -t 1 ] && [ -n "${TERM:-}" ] ; then
+        lines="$(tput lines 2>/dev/null || true)"
+    fi
+    if [ -z "$lines" ] ; then
+        lines=24
+    fi
+    if [ "$lines" -gt 0 ] ; then
+        lines=$((lines - 1))
+    fi
+fi
+
+i=0
+while [ "$i" -lt "$lines" ] ; do
+    printf '\n'
+    i=$((i + 1))
+done
